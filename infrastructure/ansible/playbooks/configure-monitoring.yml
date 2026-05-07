@@ -1,0 +1,44 @@
+---
+- name: Deploy Prometheus and Grafana on k3s via Helm
+  hosts: pulsarops_servers
+  become: true
+
+  tasks:
+    - name: Add prometheus-community Helm repo
+      command: helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+      environment:
+        KUBECONFIG: "{{ k3s_kubeconfig }}"
+
+    - name: Update Helm repos
+      command: helm repo update
+      environment:
+        KUBECONFIG: "{{ k3s_kubeconfig }}"
+
+    - name: Create monitoring namespace
+      command: kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
+      environment:
+        KUBECONFIG: "{{ k3s_kubeconfig }}"
+
+    - name: Deploy kube-prometheus-stack
+      command: >
+        helm upgrade --install kube-prometheus-stack
+        prometheus-community/kube-prometheus-stack
+        --namespace monitoring
+        --set grafana.adminPassword=pulsarops123
+        --set grafana.service.type=NodePort
+        --set grafana.service.nodePort=30300
+        --set prometheus.service.type=NodePort
+        --set prometheus.service.nodePort=30090
+        --wait --timeout 5m
+      environment:
+        KUBECONFIG: "{{ k3s_kubeconfig }}"
+
+    - name: Show monitoring pods
+      command: kubectl get pods -n monitoring
+      environment:
+        KUBECONFIG: "{{ k3s_kubeconfig }}"
+      register: monitoring_pods
+
+    - name: Display monitoring status
+      debug:
+        msg: "{{ monitoring_pods.stdout }}"

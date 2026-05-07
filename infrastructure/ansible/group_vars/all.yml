@@ -1,0 +1,18 @@
+---
+pulsarops_version: "1.0.0"
+aws_region: "us-east-1"
+ecr_registry: "YOUR_AWS_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com"
+
+k3s_version: "v1.28.4+k3s1"
+k3s_kubeconfig: "/etc/rancher/k3s/k3s.yaml"
+
+docker_packages:
+  - docker-ce
+  - docker-ce-cli
+  - containerd.io
+  - docker-buildx-plugin
+  - docker-compose-plugin
+
+helm_version: "v3.13.2"
+
+pulsarops_namespace: "pulsarops"

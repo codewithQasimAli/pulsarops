@@ -1,0 +1,126 @@
+---
+- name: Provision PulsarOps EC2 instance
+  hosts: pulsarops_servers
+  become: true
+
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install system dependencies
+      apt:
+        name:
+          - curl
+          - wget
+          - git
+          - unzip
+          - apt-transport-https
+          - ca-certificates
+          - gnupg
+          - lsb-release
+        state: present
+
+    - name: Add Docker GPG key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Add Docker repository
+      apt_repository:
+        repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+        state: present
+
+    - name: Install Docker
+      apt:
+        name: "{{ docker_packages }}"
+        state: present
+        update_cache: yes
+
+    - name: Add ubuntu user to docker group
+      user:
+        name: ubuntu
+        groups: docker
+        append: yes
+
+    - name: Start and enable Docker
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Install k3s
+      shell: curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION={{ k3s_version }} sh -
+      args:
+        creates: /usr/local/bin/k3s
+
+    - name: Wait for k3s to be ready
+      wait_for:
+        port: 6443
+        host: localhost
+        timeout: 60
+
+    - name: Make kubeconfig readable
+      file:
+        path: "{{ k3s_kubeconfig }}"
+        mode: '0644'
+
+    - name: Install Helm
+      shell: |
+        curl -fsSL https://get.helm.sh/helm-{{ helm_version }}-linux-amd64.tar.gz | tar -zx
+        mv linux-amd64/helm /usr/local/bin/helm
+        rm -rf linux-amd64
+      args:
+        creates: /usr/local/bin/helm
+
+    - name: Install kubectl via k3s symlink
+      file:
+        src: /usr/local/bin/k3s
+        dest: /usr/local/bin/kubectl
+        state: link
+
+    - name: Configure UFW — allow SSH
+      ufw:
+        rule: allow
+        port: '22'
+        proto: tcp
+
+    - name: Configure UFW — allow HTTP
+      ufw:
+        rule: allow
+        port: '80'
+        proto: tcp
+
+    - name: Configure UFW — allow HTTPS
+      ufw:
+        rule: allow
+        port: '443'
+        proto: tcp
+
+    - name: Configure UFW — allow k3s API
+      ufw:
+        rule: allow
+        port: '6443'
+        proto: tcp
+
+    - name: Configure UFW — allow PulsarOps services
+      ufw:
+        rule: allow
+        port: '8000:8012'
+        proto: tcp
+
+    - name: Enable UFW
+      ufw:
+        state: enabled
+        policy: deny
+
+    - name: Print k3s node status
+      command: kubectl get nodes
+      environment:
+        KUBECONFIG: "{{ k3s_kubeconfig }}"
+      register: node_status
+
+    - name: Show node status
+      debug:
+        msg: "{{ node_status.stdout }}"

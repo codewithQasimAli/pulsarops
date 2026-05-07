@@ -1,0 +1,68 @@
+---
+- name: Deploy PulsarOps application to k3s
+  hosts: pulsarops_servers
+  become: true
+
+  tasks:
+    - name: Authenticate Docker with ECR
+      shell: |
+        aws ecr get-login-password --region {{ aws_region }} | \
+        docker login --username AWS --password-stdin {{ ecr_registry }}
+      environment:
+        AWS_DEFAULT_REGION: "{{ aws_region }}"
+
+    - name: Create pulsarops namespace
+      command: kubectl apply -f -
+      args:
+        stdin: |
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: {{ pulsarops_namespace }}
+      environment:
+        KUBECONFIG: "{{ k3s_kubeconfig }}"
+
+    - name: Apply ConfigMap
+      command: kubectl apply -f /tmp/pulsarops/k8s/configmap.yml
+      environment:
+        KUBECONFIG: "{{ k3s_kubeconfig }}"
+
+    - name: Deploy api-gateway via Helm
+      command: >
+        helm upgrade --install api-gateway /tmp/pulsarops/helm/api-gateway
+        --namespace {{ pulsarops_namespace }}
+        --set image.repository={{ ecr_registry }}/pulsarops/api-gateway
+        --set image.tag={{ pulsarops_version }}
+        --wait
+      environment:
+        KUBECONFIG: "{{ k3s_kubeconfig }}"
+
+    - name: Deploy monitor-service via Helm
+      command: >
+        helm upgrade --install monitor-service /tmp/pulsarops/helm/monitor-service
+        --namespace {{ pulsarops_namespace }}
+        --set image.repository={{ ecr_registry }}/pulsarops/monitor-service
+        --set image.tag={{ pulsarops_version }}
+        --wait
+      environment:
+        KUBECONFIG: "{{ k3s_kubeconfig }}"
+
+    - name: Deploy alert-service via Helm
+      command: >
+        helm upgrade --install alert-service /tmp/pulsarops/helm/alert-service
+        --namespace {{ pulsarops_namespace }}
+        --set image.repository={{ ecr_registry }}/pulsarops/alert-service
+        --set image.tag={{ pulsarops_version }}
+        --wait
+      environment:
+        KUBECONFIG: "{{ k3s_kubeconfig }}"
+
+    - name: Show all PulsarOps pods
+      command: kubectl get pods -n {{ pulsarops_namespace }}
+      environment:
+        KUBECONFIG: "{{ k3s_kubeconfig }}"
+      register: app_pods
+
+    - name: Display pod status
+      debug:
+        msg: "{{ app_pods.stdout }}"
