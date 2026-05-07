@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pulsarops
+  labels:
+    app: pulsarops
+    managed-by: kubectl

@@ -1,0 +1,33 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pulsarops-ingress
+  namespace: pulsarops
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /api/v1/monitor
+            pathType: Prefix
+            backend:
+              service:
+                name: monitor-service
+                port:
+                  number: 8000
+          - path: /api/v1/alerts
+            pathType: Prefix
+            backend:
+              service:
+                name: alert-service
+                port:
+                  number: 8000
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api-gateway
+                port:
+                  number: 8000

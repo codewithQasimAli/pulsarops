@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pulsarops-config
+  namespace: pulsarops
+data:
+  MONITOR_INTERVAL: "30"
+  LATENCY_THRESHOLD_MS: "2000"
+  CACHE_TTL: "30"
+  RATE_LIMIT_REQUESTS: "60"
+  RATE_LIMIT_WINDOW: "60"
+  MONITOR_SERVICE_URL: "http://monitor-service:8000"
+  ALERT_SERVICE_URL: "http://alert-service:8000"
+  REDIS_URL: "redis://redis:6379"
+  DATABASE_URL: "postgresql://pulsarops:pulsarops@postgres:5432/pulsarops"
