@@ -1,0 +1,160 @@
+pipeline {
+    agent {
+        docker {
+            image 'python:3.11-slim'
+            args '-v /var/run/docker.sock:/var/run/docker.sock'
+        }
+    }
+
+    environment {
+        AWS_REGION         = 'us-east-1'
+        ECR_REGISTRY       = credentials('ecr-registry')
+        AWS_ACCESS_KEY_ID  = credentials('aws-access-key-id')
+        AWS_SECRET_ACCESS_KEY = credentials('aws-secret-access-key')
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+                sh 'echo "Building commit: ${GIT_COMMIT}"'
+            }
+        }
+
+        stage('Lint') {
+            parallel {
+                stage('Lint api-gateway') {
+                    steps {
+                        sh 'pip install flake8 -q'
+                        sh 'flake8 services/api-gateway/main.py --max-line-length=100 --ignore=E501,W503'
+                    }
+                }
+                stage('Lint monitor-service') {
+                    steps {
+                        sh 'pip install flake8 -q'
+                        sh 'flake8 services/monitor-service/main.py --max-line-length=100 --ignore=E501,W503'
+                    }
+                }
+                stage('Lint alert-service') {
+                    steps {
+                        sh 'pip install flake8 -q'
+                        sh 'flake8 services/alert-service/main.py --max-line-length=100 --ignore=E501,W503'
+                    }
+                }
+            }
+        }
+
+        stage('Security Scan') {
+            parallel {
+                stage('Bandit api-gateway') {
+                    steps {
+                        sh 'pip install bandit -q'
+                        sh 'bandit -r services/api-gateway/ -ll --exit-zero'
+                    }
+                }
+                stage('Bandit monitor-service') {
+                    steps {
+                        sh 'pip install bandit -q'
+                        sh 'bandit -r services/monitor-service/ -ll --exit-zero'
+                    }
+                }
+                stage('Bandit alert-service') {
+                    steps {
+                        sh 'pip install bandit -q'
+                        sh 'bandit -r services/alert-service/ -ll --exit-zero'
+                    }
+                }
+            }
+        }
+
+        stage('Build Images') {
+            parallel {
+                stage('Build api-gateway') {
+                    steps {
+                        sh 'docker build -t pulsarops-api-gateway:${GIT_COMMIT} services/api-gateway'
+                        sh 'docker tag pulsarops-api-gateway:${GIT_COMMIT} pulsarops-api-gateway:latest'
+                    }
+                }
+                stage('Build monitor-service') {
+                    steps {
+                        sh 'docker build -t pulsarops-monitor-service:${GIT_COMMIT} services/monitor-service'
+                        sh 'docker tag pulsarops-monitor-service:${GIT_COMMIT} pulsarops-monitor-service:latest'
+                    }
+                }
+                stage('Build alert-service') {
+                    steps {
+                        sh 'docker build -t pulsarops-alert-service:${GIT_COMMIT} services/alert-service'
+                        sh 'docker tag pulsarops-alert-service:${GIT_COMMIT} pulsarops-alert-service:latest'
+                    }
+                }
+            }
+        }
+
+        stage('Push to ECR') {
+            steps {
+                sh '''
+                    apt-get update -qq && apt-get install -y -qq awscli
+                    aws ecr get-login-password --region ${AWS_REGION} | \
+                    docker login --username AWS --password-stdin ${ECR_REGISTRY}
+                '''
+            }
+            parallel {
+                stage('Push api-gateway') {
+                    steps {
+                        sh 'docker tag pulsarops-api-gateway:${GIT_COMMIT} ${ECR_REGISTRY}/pulsarops/api-gateway:${GIT_COMMIT}'
+                        sh 'docker push ${ECR_REGISTRY}/pulsarops/api-gateway:${GIT_COMMIT}'
+                    }
+                }
+                stage('Push monitor-service') {
+                    steps {
+                        sh 'docker tag pulsarops-monitor-service:${GIT_COMMIT} ${ECR_REGISTRY}/pulsarops/monitor-service:${GIT_COMMIT}'
+                        sh 'docker push ${ECR_REGISTRY}/pulsarops/monitor-service:${GIT_COMMIT}'
+                    }
+                }
+                stage('Push alert-service') {
+                    steps {
+                        sh 'docker tag pulsarops-alert-service:${GIT_COMMIT} ${ECR_REGISTRY}/pulsarops/alert-service:${GIT_COMMIT}'
+                        sh 'docker push ${ECR_REGISTRY}/pulsarops/alert-service:${GIT_COMMIT}'
+                    }
+                }
+            }
+        }
+
+        stage('Deploy to k3s') {
+            steps {
+                sh '''
+                    helm upgrade --install api-gateway ./helm/api-gateway \
+                        --namespace pulsarops \
+                        --set image.repository=${ECR_REGISTRY}/pulsarops/api-gateway \
+                        --set image.tag=${GIT_COMMIT} \
+                        --wait
+
+                    helm upgrade --install monitor-service ./helm/monitor-service \
+                        --namespace pulsarops \
+                        --set image.repository=${ECR_REGISTRY}/pulsarops/monitor-service \
+                        --set image.tag=${GIT_COMMIT} \
+                        --wait
+
+                    helm upgrade --install alert-service ./helm/alert-service \
+                        --namespace pulsarops \
+                        --set image.repository=${ECR_REGISTRY}/pulsarops/alert-service \
+                        --set image.tag=${GIT_COMMIT} \
+                        --wait
+                '''
+            }
+        }
+    }
+
+    post {
+        always {
+            sh 'bandit -r services/ -f json -o bandit-report.json || true'
+            archiveArtifacts artifacts: 'bandit-report.json', allowEmptyArchive: true
+        }
+        success {
+            echo 'PulsarOps pipeline completed successfully'
+        }
+        failure {
+            echo 'Pipeline failed — check logs above'
+        }
+    }
+}

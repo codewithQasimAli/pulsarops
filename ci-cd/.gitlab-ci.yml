@@ -1,0 +1,90 @@
+stages:
+  - lint
+  - security
+  - build
+  - deploy
+
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: ""
+  AWS_REGION: us-east-1
+
+default:
+  image: python:3.11-slim
+  before_script:
+    - pip install flake8 bandit -q
+
+lint:api-gateway:
+  stage: lint
+  script:
+    - flake8 services/api-gateway/main.py --max-line-length=100 --ignore=E501,W503 --statistics
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+
+lint:monitor-service:
+  stage: lint
+  script:
+    - flake8 services/monitor-service/main.py --max-line-length=100 --ignore=E501,W503 --statistics
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+
+lint:alert-service:
+  stage: lint
+  script:
+    - flake8 services/alert-service/main.py --max-line-length=100 --ignore=E501,W503 --statistics
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+
+security:bandit:
+  stage: security
+  script:
+    - bandit -r services/ -ll --exit-zero
+    - bandit -r services/ -f json -o bandit-report.json || true
+  artifacts:
+    paths:
+      - bandit-report.json
+    expire_in: 7 days
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+
+build:images:
+  stage: build
+  image: docker:24
+  services:
+    - docker:24-dind
+  before_script:
+    - apk add --no-cache aws-cli
+    - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
+  script:
+    - docker build -t $ECR_REGISTRY/pulsarops/api-gateway:$CI_COMMIT_SHA services/api-gateway
+    - docker build -t $ECR_REGISTRY/pulsarops/monitor-service:$CI_COMMIT_SHA services/monitor-service
+    - docker build -t $ECR_REGISTRY/pulsarops/alert-service:$CI_COMMIT_SHA services/alert-service
+    - docker push $ECR_REGISTRY/pulsarops/api-gateway:$CI_COMMIT_SHA
+    - docker push $ECR_REGISTRY/pulsarops/monitor-service:$CI_COMMIT_SHA
+    - docker push $ECR_REGISTRY/pulsarops/alert-service:$CI_COMMIT_SHA
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+
+deploy:k3s:
+  stage: deploy
+  image: alpine/helm:3.13.2
+  before_script:
+    - apk add --no-cache curl kubectl
+  script:
+    - helm upgrade --install api-gateway ./helm/api-gateway
+        --namespace pulsarops
+        --set image.repository=$ECR_REGISTRY/pulsarops/api-gateway
+        --set image.tag=$CI_COMMIT_SHA
+        --wait
+    - helm upgrade --install monitor-service ./helm/monitor-service
+        --namespace pulsarops
+        --set image.repository=$ECR_REGISTRY/pulsarops/monitor-service
+        --set image.tag=$CI_COMMIT_SHA
+        --wait
+    - helm upgrade --install alert-service ./helm/alert-service
+        --namespace pulsarops
+        --set image.repository=$ECR_REGISTRY/pulsarops/alert-service
+        --set image.tag=$CI_COMMIT_SHA
+        --wait
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
