@@ -1,0 +1,12 @@
+.env
+*.tfstate
+*.tfstate.backup
+.terraform/
+__pycache__/
+*.pyc
+.DS_Store
+venv/
+*.pem
+*.key
+k8s/secret.yml
+.claude/

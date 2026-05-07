@@ -1,0 +1,8 @@
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+httpx==0.28.1
+redis[asyncio]==5.2.0
+asyncpg==0.30.0
+prometheus-client==0.21.0
+pydantic==2.10.3
+python-multipart==0.0.19
