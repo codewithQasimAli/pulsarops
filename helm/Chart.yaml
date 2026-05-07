@@ -1,0 +1,16 @@
+apiVersion: v2
+name: pulsarops
+description: PulsarOps — complete cloud-native microservices platform
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+dependencies:
+  - name: api-gateway
+    version: 0.1.0
+    repository: file://../api-gateway
+  - name: monitor-service
+    version: 0.1.0
+    repository: file://../monitor-service
+  - name: alert-service
+    version: 0.1.0
+    repository: file://../alert-service

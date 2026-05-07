@@ -1,0 +1,6 @@
+apiVersion: v2
+name: api-gateway
+description: PulsarOps API Gateway — Redis cache-aside, rate limiting, request routing
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

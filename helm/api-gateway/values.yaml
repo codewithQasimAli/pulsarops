@@ -1,0 +1,42 @@
+replicaCount: 1
+
+image:
+  repository: pulsarops-api-gateway
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: LoadBalancer
+  port: 8000
+
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "100m"
+  limits:
+    memory: "256Mi"
+    cpu: "200m"
+
+env:
+  REDIS_URL: "redis://redis:6379"
+  MONITOR_SERVICE_URL: "http://monitor-service:8000"
+  ALERT_SERVICE_URL: "http://alert-service:8000"
+  CACHE_TTL: "30"
+  RATE_LIMIT_REQUESTS: "60"
+  RATE_LIMIT_WINDOW: "60"
+
+autoscaling:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+
+livenessProbe:
+  path: /health
+  initialDelaySeconds: 30
+  periodSeconds: 30
+
+readinessProbe:
+  path: /health
+  initialDelaySeconds: 15
+  periodSeconds: 10
