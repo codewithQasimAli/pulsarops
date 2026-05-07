@@ -216,6 +216,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="PulsarOps Alert Service", version="1.0.0", lifespan=lifespan)
 
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------

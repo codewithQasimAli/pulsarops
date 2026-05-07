@@ -31,12 +31,12 @@ MONITOR_INTERVAL = int(os.getenv("MONITOR_INTERVAL", "30"))
 LATENCY_THRESHOLD_MS = int(os.getenv("LATENCY_THRESHOLD_MS", "2000"))
 
 TARGETS = [
-    {"name": "google",     "url": "https://www.google.com"},
-    {"name": "github",     "url": "https://github.com"},
-    {"name": "aws",        "url": "https://aws.amazon.com"},
+    {"name": "google", "url": "https://www.google.com"},
+    {"name": "github", "url": "https://github.com"},
+    {"name": "aws", "url": "https://aws.amazon.com"},
     {"name": "cloudflare", "url": "https://www.cloudflare.com"},
-    {"name": "azure",      "url": "https://azure.microsoft.com"},
-    {"name": "grafana",    "url": "https://grafana.com"},
+    {"name": "azure", "url": "https://azure.microsoft.com"},
+    {"name": "grafana", "url": "https://grafana.com"},
 ]
 
 # ---------------------------------------------------------------------------
@@ -182,6 +182,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="PulsarOps Monitor Service", version="1.0.0", lifespan=lifespan)
+
 
 # ---------------------------------------------------------------------------
 # Routes

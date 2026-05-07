@@ -6,8 +6,8 @@ from contextlib import asynccontextmanager
 
 import httpx
 import redis.asyncio as aioredis
-from fastapi import FastAPI, Request, Response, HTTPException
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.responses import PlainTextResponse
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 
 # ---------------------------------------------------------------------------
@@ -68,6 +68,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="PulsarOps API Gateway", version="1.0.0", lifespan=lifespan)
+
 
 # ---------------------------------------------------------------------------
 # Middleware — structured request logging + Prometheus instrumentation
