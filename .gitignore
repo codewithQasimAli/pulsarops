@@ -2,6 +2,7 @@
 *.tfstate
 *.tfstate.backup
 .terraform/
+infrastructure/terraform/terraform.tfvars
 __pycache__/
 *.pyc
 .DS_Store
