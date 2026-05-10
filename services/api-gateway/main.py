@@ -7,7 +7,8 @@ from contextlib import asynccontextmanager
 import httpx
 import redis.asyncio as aioredis
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.staticfiles import StaticFiles
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 
 # ---------------------------------------------------------------------------
@@ -68,6 +69,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="PulsarOps API Gateway", version="1.0.0", lifespan=lifespan)
+
+if os.path.exists("/dashboard"):
+    app.mount("/static", StaticFiles(directory="/dashboard"), name="static")
 
 
 # ---------------------------------------------------------------------------
@@ -167,13 +171,9 @@ async def metrics():
 
 @app.get("/")
 async def root():
-    return {
-        "service": "PulsarOps API Gateway",
-        "version": "1.0.0",
-        "docs": "/docs",
-        "health": "/health",
-        "metrics": "/metrics",
-    }
+    if os.path.exists("/dashboard/index.html"):
+        return FileResponse("/dashboard/index.html")
+    return {"service": "PulsarOps API Gateway", "version": "1.0.0"}
 
 
 @app.get("/api/v1/monitor/check")

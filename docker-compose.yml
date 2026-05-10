@@ -97,6 +97,8 @@ services:
       CACHE_TTL: ${CACHE_TTL}
       RATE_LIMIT_REQUESTS: 60
       RATE_LIMIT_WINDOW: 60
+    volumes:
+      - ./dashboard:/dashboard:ro
     networks:
       - pulsarops-net
     depends_on:

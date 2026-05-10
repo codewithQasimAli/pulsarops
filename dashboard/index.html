@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PulsarOps — Infrastructure Monitor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:          #0d1117;
+      --surface:     #161b22;
+      --border:      #30363d;
+      --text:        #e6edf3;
+      --muted:       #8b949e;
+      --green:       #3fb950;
+      --green-dim:   #1a4028;
+      --red:         #f85149;
+      --red-dim:     #3d1a1a;
+      --yellow:      #d29922;
+      --yellow-dim:  #3d2f0a;
+      --blue:        #58a6ff;
+      --purple:      #bc8cff;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    /* ── Header ─────────────────────────────────────────────────────────── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 60px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 8px var(--green);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.4; }
+    }
+
+    .brand h1 {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+      color: var(--text);
+    }
+
+    .brand p {
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 400;
+    }
+
+    /* ── Status bar ──────────────────────────────────────────────────────── */
+    #status-bar {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    #healthy-count {
+      font-weight: 600;
+      font-size: 13px;
+      color: var(--green);
+    }
+
+    #last-updated { color: var(--muted); }
+
+    .refresh-indicator {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--blue);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .refresh-indicator.active { opacity: 1; }
+
+    /* ── Main layout ─────────────────────────────────────────────────────── */
+    main {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    section { display: flex; flex-direction: column; gap: 12px; }
+
+    .section-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .section-title::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* ── Target grid ─────────────────────────────────────────────────────── */
+    #targets-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+      gap: 12px;
+    }
+
+    .target-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .target-card.healthy {
+      border-color: var(--green);
+      box-shadow: 0 0 0 1px rgba(63, 185, 80, 0.15);
+    }
+
+    .target-card.unhealthy {
+      border-color: var(--red);
+      box-shadow: 0 0 0 1px rgba(248, 81, 73, 0.15);
+    }
+
+    .target-card.loading { border-color: var(--border); opacity: 0.6; }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .target-name {
+      font-weight: 600;
+      font-size: 13px;
+      text-transform: capitalize;
+    }
+
+    .status-badge {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      padding: 2px 7px;
+      border-radius: 20px;
+    }
+
+    .status-badge.healthy  { background: var(--green-dim); color: var(--green); }
+    .status-badge.unhealthy { background: var(--red-dim); color: var(--red); }
+    .status-badge.loading  { background: var(--border); color: var(--muted); }
+
+    .latency-value {
+      font-size: 26px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      line-height: 1;
+    }
+
+    .target-card.healthy   .latency-value { color: var(--green); }
+    .target-card.unhealthy .latency-value { color: var(--red); }
+    .target-card.loading   .latency-value { color: var(--muted); }
+
+    .latency-label {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .target-url {
+      font-size: 10px;
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* ── Chart ───────────────────────────────────────────────────────────── */
+    .chart-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+    }
+
+    .chart-wrap canvas { max-height: 200px; }
+
+    /* ── Alerts ──────────────────────────────────────────────────────────── */
+    #alerts-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .alert-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .alert-card.critical { border-left: 3px solid var(--red); }
+    .alert-card.warning  { border-left: 3px solid var(--yellow); }
+
+    .severity-badge {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      padding: 3px 8px;
+      border-radius: 20px;
+      white-space: nowrap;
+    }
+
+    .severity-badge.critical { background: var(--red-dim); color: var(--red); }
+    .severity-badge.warning  { background: var(--yellow-dim); color: var(--yellow); }
+
+    .alert-target {
+      font-weight: 600;
+      font-size: 13px;
+      min-width: 100px;
+      text-transform: capitalize;
+    }
+
+    .alert-message {
+      flex: 1;
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .alert-time {
+      font-size: 11px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .no-alerts {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 24px;
+      text-align: center;
+      color: var(--green);
+      font-weight: 600;
+      font-size: 13px;
+    }
+
+    .no-alerts span { margin-right: 8px; }
+
+    /* ── Error banner ────────────────────────────────────────────────────── */
+    #error-banner {
+      display: none;
+      background: var(--red-dim);
+      border: 1px solid var(--red);
+      border-radius: 8px;
+      padding: 10px 16px;
+      color: var(--red);
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    /* ── Responsive ──────────────────────────────────────────────────────── */
+    @media (max-width: 600px) {
+      #targets-grid { grid-template-columns: 1fr 1fr; }
+      .alert-message { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="brand-dot"></div>
+    <div>
+      <h1>PulsarOps</h1>
+      <p>Cloud-Native Infrastructure Monitor</p>
+    </div>
+  </div>
+  <div id="status-bar">
+    <span id="healthy-count">— / 6 healthy</span>
+    <span id="last-updated">Connecting…</span>
+    <div class="refresh-indicator" id="refresh-dot"></div>
+  </div>
+</header>
+
+<main>
+  <div id="error-banner"></div>
+
+  <section>
+    <div class="section-title">Target Status</div>
+    <div id="targets-grid"></div>
+  </section>
+
+  <section>
+    <div class="section-title">Response Latency (ms)</div>
+    <div class="chart-wrap">
+      <canvas id="latency-chart"></canvas>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-title">Active Alerts</div>
+    <div id="alerts-list"><div class="no-alerts"><span>✓</span>Loading alerts…</div></div>
+  </section>
+</main>
+
+<script>
+const TARGETS = ['google', 'github', 'aws', 'cloudflare', 'azure', 'grafana'];
+const API_BASE = '';  // same origin — served by api-gateway itself
+
+let latencyChart = null;
+
+// ── Chart setup ──────────────────────────────────────────────────────────────
+function initChart() {
+  const ctx = document.getElementById('latency-chart').getContext('2d');
+  latencyChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: TARGETS.map(t => t.charAt(0).toUpperCase() + t.slice(1)),
+      datasets: [{
+        label: 'Latency (ms)',
+        data: new Array(TARGETS.length).fill(0),
+        backgroundColor: TARGETS.map(() => 'rgba(88, 166, 255, 0.25)'),
+        borderColor:     TARGETS.map(() => 'rgba(88, 166, 255, 0.8)'),
+        borderWidth: 1,
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      animation: { duration: 400 },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => `${ctx.parsed.y.toFixed(1)} ms`
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: '#30363d' },
+          ticks: { color: '#8b949e', font: { family: 'Inter', size: 12 } }
+        },
+        y: {
+          grid: { color: '#30363d' },
+          ticks: { color: '#8b949e', font: { family: 'Inter', size: 12 }, callback: v => v + ' ms' },
+          beginAtZero: true
+        }
+      }
+    }
+  });
+}
+
+// ── Render target cards ──────────────────────────────────────────────────────
+function renderTargets(results) {
+  const grid = document.getElementById('targets-grid');
+  const byName = {};
+  (results || []).forEach(r => { byName[r.target] = r; });
+
+  let healthyCount = 0;
+  const latencies = [];
+
+  grid.innerHTML = TARGETS.map(name => {
+    const r = byName[name];
+    if (!r) {
+      latencies.push(0);
+      return `<div class="target-card loading">
+        <div class="card-header">
+          <span class="target-name">${name}</span>
+          <span class="status-badge loading">—</span>
+        </div>
+        <div class="latency-value">—</div>
+        <div class="latency-label">ms latency</div>
+      </div>`;
+    }
+
+    const healthy = r.status === 'healthy';
+    if (healthy) healthyCount++;
+    const cls = healthy ? 'healthy' : 'unhealthy';
+    const lat = r.latency_ms != null ? r.latency_ms.toFixed(1) : '—';
+    latencies.push(r.latency_ms || 0);
+
+    const barColor = healthy
+      ? ['rgba(63,185,80,0.25)', 'rgba(63,185,80,0.8)']
+      : ['rgba(248,81,73,0.25)', 'rgba(248,81,73,0.8)'];
+
+    if (latencyChart) {
+      const idx = TARGETS.indexOf(name);
+      latencyChart.data.datasets[0].backgroundColor[idx] = barColor[0];
+      latencyChart.data.datasets[0].borderColor[idx]     = barColor[1];
+    }
+
+    return `<div class="target-card ${cls}">
+      <div class="card-header">
+        <span class="target-name">${name}</span>
+        <span class="status-badge ${cls}">${r.status.toUpperCase()}</span>
+      </div>
+      <div class="latency-value">${lat}</div>
+      <div class="latency-label">ms response time</div>
+      <div class="target-url">${r.url || ''}</div>
+    </div>`;
+  }).join('');
+
+  if (latencyChart) {
+    latencyChart.data.datasets[0].data = latencies;
+    latencyChart.update();
+  }
+
+  document.getElementById('healthy-count').textContent =
+    `${healthyCount} / ${TARGETS.length} healthy`;
+}
+
+// ── Render alerts ────────────────────────────────────────────────────────────
+function timeAgo(isoString) {
+  if (!isoString) return '';
+  const diff = Math.floor((Date.now() - new Date(isoString)) / 1000);
+  if (diff < 60)   return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  return `${Math.floor(diff / 3600)}h ago`;
+}
+
+function renderAlerts(alerts) {
+  const list = document.getElementById('alerts-list');
+  if (!alerts || alerts.length === 0) {
+    list.innerHTML = '<div class="no-alerts"><span>✓</span>All systems operational — no active alerts</div>';
+    return;
+  }
+
+  list.innerHTML = alerts.map(a => {
+    const sev = (a.severity || 'warning').toLowerCase();
+    return `<div class="alert-card ${sev}">
+      <span class="severity-badge ${sev}">${sev.toUpperCase()}</span>
+      <span class="alert-target">${a.target || '—'}</span>
+      <span class="alert-message">${a.message || ''}</span>
+      <span class="alert-time">${timeAgo(a.fired_at)}</span>
+    </div>`;
+  }).join('');
+}
+
+// ── Fetch & refresh ──────────────────────────────────────────────────────────
+function showError(msg) {
+  const banner = document.getElementById('error-banner');
+  banner.textContent = '⚠ ' + msg;
+  banner.style.display = 'block';
+}
+
+function clearError() {
+  document.getElementById('error-banner').style.display = 'none';
+}
+
+async function refresh() {
+  const dot = document.getElementById('refresh-dot');
+  dot.classList.add('active');
+
+  try {
+    const [checkRes, alertRes] = await Promise.all([
+      fetch(`${API_BASE}/api/v1/monitor/check`),
+      fetch(`${API_BASE}/api/v1/alerts/active`)
+    ]);
+
+    if (!checkRes.ok) throw new Error(`Monitor API returned ${checkRes.status}`);
+    if (!alertRes.ok) throw new Error(`Alerts API returned ${alertRes.status}`);
+
+    const checkData = await checkRes.json();
+    const alertData = await alertRes.json();
+
+    clearError();
+    renderTargets(checkData.results || []);
+    renderAlerts(alertData.alerts || []);
+
+    document.getElementById('last-updated').textContent =
+      'Updated ' + new Date().toLocaleTimeString();
+
+  } catch (err) {
+    showError(err.message);
+  } finally {
+    setTimeout(() => dot.classList.remove('active'), 500);
+  }
+}
+
+// ── Skeleton cards while loading ─────────────────────────────────────────────
+function renderSkeleton() {
+  document.getElementById('targets-grid').innerHTML = TARGETS.map(name =>
+    `<div class="target-card loading">
+      <div class="card-header">
+        <span class="target-name">${name}</span>
+        <span class="status-badge loading">—</span>
+      </div>
+      <div class="latency-value">—</div>
+      <div class="latency-label">ms latency</div>
+    </div>`
+  ).join('');
+}
+
+// ── Boot ─────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  renderSkeleton();
+  initChart();
+  refresh();
+  setInterval(refresh, 10000);
+});
+</script>
+</body>
+</html>
